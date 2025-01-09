@@ -10,6 +10,7 @@ mediatek_setup_interfaces()
 	case $board in
 	abt,asr3000|\
 	abt,asr3000-ubootmod|\
+	cmcc,xr30|\
 	cmcc,rax3000m|\
 	cmcc,rax3000m-emmc-ubootmod|\
 	cmcc,rax3000m-nand-ubootmod|\
@@ -41,7 +42,8 @@ mediatek_setup_interfaces()
 	livinet,zr-3020-ubootmod|\
 	qihoo,360t7|\
 	qihoo,360t7-ubootmod|\
-	routerich,ax3000)
+	routerich,ax3000|\
+	sl,3000-emmc)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"
 		;;
 	asus,tuf-ax4200|\

@@ -508,6 +508,26 @@ define Device/cmcc_rax3000m-nand-ubootmod
 endef
 TARGET_DEVICES += cmcc_rax3000m-nand-ubootmod
 
+define Device/cmcc_xr30
+  DEVICE_VENDOR := CMCC
+  DEVICE_MODEL := XR30 NAND
+  DEVICE_VARIANT := (custom U-Boot layout)
+  DEVICE_DTS := mt7981b-cmcc-xr30
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := kmod-mt7981-firmware mt7981-wo-firmware kmod-usb3 \
+	automount f2fsck mkf2fs
+  SUPPORTED_DEVICES := cmcc,xr30
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  IMAGE_SIZE := 116736k
+  KERNEL_IN_UBI := 1
+  IMAGES += factory.bin
+  IMAGE/factory.bin := append-ubi | check-size $$$$(IMAGE_SIZE)
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += cmcc_xr30
+
 define Device/comfast_cf-e393ax
   DEVICE_VENDOR := Comfast
   DEVICE_MODEL := CF-E393AX
@@ -1226,6 +1246,19 @@ define Device/routerich_ax3000
   SUPPORTED_DEVICES += mediatek,mt7981-spim-snand-rfb
 endef
 TARGET_DEVICES += routerich_ax3000
+
+define Device/sl_3000-emmc
+  DEVICE_VENDOR := SL
+  DEVICE_MODEL := 3000 eMMC
+  DEVICE_VARIANT := (custom U-Boot layout)
+  DEVICE_DTS := mt7981b-sl-3000-emmc
+  DEVICE_DTS_DIR := ../dts
+  SUPPORTED_DEVICES := sl,3000-emmc
+  DEVICE_PACKAGES := kmod-mt7981-firmware mt7981-wo-firmware kmod-usb3 kmod-mmc \
+	automount f2fsck mkf2fs
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += sl_3000-emmc
 
 define Device/tplink_tl-xdr-common
   DEVICE_VENDOR := TP-Link
