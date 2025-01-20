@@ -1544,6 +1544,23 @@ define Device/ruijie_rg-x60-pro
 endef
 TARGET_DEVICES += ruijie_rg-x60-pro
 
+define Device/sl_3000-emmc-ubootmod
+  DEVICE_VENDOR := SL
+  DEVICE_MODEL := 3000 eMMC
+  DEVICE_VARIANT := (custom U-Boot layout)
+  DEVICE_DTS := mt7981b-sl-3000-emmc-ubootmod
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware kmod-mmc kmod-fs-f2fs kmod-fs-ext4 \
+	automount f2fsck mkf2fs losetup
+  SUPPORTED_DEVICES := sl,3000-emmc
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  IMAGE_SIZE := 116736k
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += sl_3000-emmc-ubootmod
+
 define Device/tplink_re6000xd
   DEVICE_VENDOR := TP-Link
   DEVICE_MODEL := RE6000XD
