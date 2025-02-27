@@ -532,11 +532,48 @@ define Device/cetron_ct3003-ubootmod
 endef
 TARGET_DEVICES += cetron_ct3003-ubootmod
 
-define Device/cmcc_a10
+define Device/cmcc_a10-stock
   DEVICE_VENDOR := CMCC
   DEVICE_MODEL := A10
-  DEVICE_DTS := mt7981b-cmcc-a10
+  DEVICE_VARIANT := (stock layout)
+  DEVICE_ALT0_VENDOR := SuperElectron
+  DEVICE_ALT0_MODEL := ZN-M5
+  DEVICE_ALT0_VARIANT := (stock layout)
+  DEVICE_ALT1_VENDOR := SuperElectron
+  DEVICE_ALT1_MODEL := ZN-M8
+  DEVICE_ALT1_VARIANT := (stock layout)
+  DEVICE_DTS := mt7981b-cmcc-a10-stock
   DEVICE_DTS_DIR := ../dts
+  SUPPORTED_DEVICES += mediatek,mt7981-spim-snand-rfb
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  IMAGE_SIZE := 65536k
+  KERNEL_IN_UBI := 1
+  IMAGES += factory.bin
+  IMAGE/factory.bin := append-ubi | check-size $$$$(IMAGE_SIZE)
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  KERNEL = kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
+  KERNEL_INITRAMFS = kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd
+endef
+TARGET_DEVICES += cmcc_a10-stock
+
+define Device/cmcc_a10-ubootmod
+  DEVICE_VENDOR := CMCC
+  DEVICE_MODEL := A10
+  DEVICE_VARIANT := (OpenWrt U-Boot layout)
+  DEVICE_ALT0_VENDOR := SuperElectron
+  DEVICE_ALT0_MODEL := ZN-M5
+  DEVICE_ALT0_VARIANT := (OpenWrt U-Boot layout)
+  DEVICE_ALT1_VENDOR := SuperElectron
+  DEVICE_ALT1_MODEL := ZN-M8
+  DEVICE_ALT1_VARIANT := (OpenWrt U-Boot layout)
+  DEVICE_DTS := mt7981b-cmcc-a10-ubootmod
+  DEVICE_DTS_DIR := ../dts
+  SUPPORTED_DEVICES += cmcc,a10
   DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
@@ -553,8 +590,10 @@ define Device/cmcc_a10
   ARTIFACTS := preloader.bin bl31-uboot.fip
   ARTIFACT/preloader.bin := mt7981-bl2 spim-nand-ddr3
   ARTIFACT/bl31-uboot.fip := mt7981-bl31-uboot cmcc_a10
+  DEVICE_COMPAT_VERSION := 1.2
+  DEVICE_COMPAT_MESSAGE := Flash layout changes require bootloader update (for ImmortalWrt 23.05 users)
 endef
-TARGET_DEVICES += cmcc_a10
+TARGET_DEVICES += cmcc_a10-ubootmod
 
 define Device/cmcc_rax3000m
   DEVICE_VENDOR := CMCC
@@ -740,9 +779,34 @@ define Device/cudy_tr3000-v1
   IMAGE_SIZE := 65536k
   KERNEL_IN_UBI := 1
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
-  DEVICE_PACKAGES := kmod-usb3 kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware
+  DEVICE_PACKAGES := kmod-usb3 kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware automount
 endef
 TARGET_DEVICES += cudy_tr3000-v1
+
+define Device/cudy_tr3000-v1-ubootmod
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := TR3000
+  DEVICE_VARIANT := v1 (OpenWrt U-Boot layout)
+  DEVICE_DTS := mt7981b-cudy-tr3000-v1-ubootmod
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := kmod-usb3 kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware automount
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  KERNEL_IN_UBI := 1
+  UBOOTENV_IN_UBI := 1
+  IMAGES := sysupgrade.itb
+  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+  KERNEL := kernel-bin | gzip
+  KERNEL_INITRAMFS := kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
+  IMAGE/sysupgrade.itb := append-kernel | \
+	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | append-metadata
+  ARTIFACTS := preloader.bin bl31-uboot.fip
+  ARTIFACT/preloader.bin := mt7981-bl2 cudy-tr3000-v1
+  ARTIFACT/bl31-uboot.fip := mt7981-bl31-uboot cudy_tr3000-v1
+endef
+TARGET_DEVICES += cudy_tr3000-v1-ubootmod
 
 define Device/cudy_wr3000-v1
   DEVICE_VENDOR := Cudy
@@ -971,6 +1035,23 @@ define Device/h3c_magic-nx30-pro-nmbm
         fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd
 endef
 TARGET_DEVICES += h3c_magic-nx30-pro-nmbm
+
+define Device/huasifei_wh3000-emmc
+  DEVICE_VENDOR := Huasifei
+  DEVICE_MODEL := WH3000 eMMC
+  DEVICE_ALT0_VENDOR := Fudy
+  DEVICE_ALT0_MODEL := MT3000
+  DEVICE_DTS := mt7981b-huasifei-wh3000-emmc
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware \
+	kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan kmod-usb-serial-option \
+	kmod-usb3 automount f2fsck mkf2fs uqmi
+  KERNEL := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
+  KERNEL_INITRAMFS := kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += huasifei_wh3000-emmc
 
 define Device/imou_lc-hx3001
   DEVICE_VENDOR := Imou
@@ -1869,6 +1950,10 @@ TARGET_DEVICES += zbtlink_zbt-z8103ax
 define Device/zyxel_ex5601-t0-stock
   DEVICE_VENDOR := Zyxel
   DEVICE_MODEL := EX5601-T0
+  DEVICE_ALT0_VENDOR := Zyxel
+  DEVICE_ALT0_MODEL := EX5601-T1
+  DEVICE_ALT1_VENDOR := Zyxel
+  DEVICE_ALT1_MODEL := T-56
   DEVICE_VARIANT := (stock layout)
   DEVICE_DTS := mt7986a-zyxel-ex5601-t0-stock
   DEVICE_DTS_DIR := ../dts
@@ -1892,6 +1977,10 @@ TARGET_DEVICES += zyxel_ex5601-t0-stock
 define Device/zyxel_ex5601-t0-ubootmod
   DEVICE_VENDOR := Zyxel
   DEVICE_MODEL := EX5601-T0
+  DEVICE_ALT0_VENDOR := Zyxel
+  DEVICE_ALT0_MODEL := EX5601-T1
+  DEVICE_ALT1_VENDOR := Zyxel
+  DEVICE_ALT1_MODEL := T-56
   DEVICE_VARIANT := (OpenWrt U-Boot layout)
   DEVICE_DTS := mt7986a-zyxel-ex5601-t0-ubootmod
   DEVICE_DTS_DIR := ../dts
