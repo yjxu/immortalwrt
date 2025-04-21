@@ -167,6 +167,17 @@ define Device/comfast_cf-wr758ac-v2
 endef
 TARGET_DEVICES += comfast_cf-wr758ac-v2
 
+define Device/cudy_m1200-v1
+  IMAGE_SIZE := 15872k
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := M1200
+  DEVICE_VARIANT := v1
+  DEVICE_PACKAGES := kmod-mt7615e kmod-mt7663-firmware-ap
+  UIMAGE_NAME := R22
+  SUPPORTED_DEVICES += R22
+endef
+TARGET_DEVICES += cudy_m1200-v1
+
 define Device/cudy_tr1200-v1
   IMAGE_SIZE := 15872k
   DEVICE_VENDOR := Cudy
@@ -310,6 +321,15 @@ define Device/hiwifi_hc5861b
   DEVICE_PACKAGES := kmod-mt76x2
 endef
 TARGET_DEVICES += hiwifi_hc5861b
+
+define Device/huasifei_shf283
+   IMAGE_SIZE := 16064k
+   DEVICE_VENDOR := Huasifei
+   DEVICE_MODEL := SHF283
+   DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-cdc-mbim \
+	kmod-usb-net-qmi-wwan kmod-usb-net-rndis kmod-usb-serial-option uqmi
+endef
+TARGET_DEVICES += huasifei_shf283
 
 define Device/iptime_a3
   IMAGE_SIZE := 7936k
