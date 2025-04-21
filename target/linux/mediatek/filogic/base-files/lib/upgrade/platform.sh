@@ -40,13 +40,15 @@ xiaomi_initial_setup()
 		return 0
 	fi
 
-	fw_setenv boot_wait on
-	fw_setenv uart_en 1
-	fw_setenv flag_boot_rootfs 0
-	fw_setenv flag_last_success 1
-	fw_setenv flag_boot_success 1
-	fw_setenv flag_try_sys1_failed 8
-	fw_setenv flag_try_sys2_failed 8
+	fw_setenv -s - <<-EOF
+		boot_wait on
+		uart_en 1
+		flag_boot_rootfs 0
+		flag_last_success 1
+		flag_boot_success 1
+		flag_try_sys1_failed 8
+		flag_try_sys2_failed 8
+	EOF
 
 	local board=$(board_name)
 	case "$board" in
@@ -70,8 +72,10 @@ platform_do_upgrade() {
 	bananapi,bpi-r4|\
 	bananapi,bpi-r4-poe|\
 	cetron,ct3003-ubootmod|\
-	cmcc,a10|\
+	cmcc,a10-ubootmod|\
 	cmcc,rax3000m|\
+	cmcc,rax3000me|\
+	cudy,tr3000-v1-ubootmod|\
 	gatonetworks,gdsp|\
 	h3c,magic-nx30-pro|\
 	imou,lc-hx3001|\
@@ -82,9 +86,11 @@ platform_do_upgrade() {
 	mediatek,mt7981-rfb|\
 	mediatek,mt7988a-rfb|\
 	mercusys,mr90x-v1-ubi|\
+	netis,nx31|\
 	nokia,ea0326gmp|\
 	openwrt,one|\
 	netcore,n60|\
+	netcore,n60-pro|\
 	qihoo,360t7|\
 	routerich,ax3000-ubootmod|\
 	tplink,tl-xdr4288|\
@@ -105,6 +111,7 @@ platform_do_upgrade() {
 	glinet,gl-mt6000|\
 	glinet,gl-x3000|\
 	glinet,gl-xe3000|\
+	huasifei,wh3000-emmc|\
 	smartrg,sdg-8612|\
 	smartrg,sdg-8614|\
 	smartrg,sdg-8622|\
@@ -186,7 +193,8 @@ platform_check_image() {
 	bananapi,bpi-r3-mini|\
 	bananapi,bpi-r4|\
 	bananapi,bpi-r4-poe|\
-	cmcc,rax3000m)
+	cmcc,rax3000m|\
+	cmcc,rax3000me)
 		[ "$magic" != "d00dfeed" ] && {
 			echo "Invalid image type."
 			return 1
@@ -212,6 +220,7 @@ platform_copy_config() {
 	glinet,gl-mt6000|\
 	glinet,gl-x3000|\
 	glinet,gl-xe3000|\
+	huasifei,wh3000-emmc|\
 	jdcloud,re-cp-03|\
 	smartrg,sdg-8612|\
 	smartrg,sdg-8614|\
@@ -227,7 +236,8 @@ platform_copy_config() {
 	bananapi,bpi-r3-mini|\
 	bananapi,bpi-r4|\
 	bananapi,bpi-r4-poe|\
-	cmcc,rax3000m)
+	cmcc,rax3000m|\
+	cmcc,rax3000me)
 		if [ "$CI_METHOD" = "emmc" ]; then
 			emmc_copy_config
 		fi
