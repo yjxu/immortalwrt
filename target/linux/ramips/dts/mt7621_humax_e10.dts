@@ -177,6 +177,13 @@
 	/delete-property/ interrupts;
 };
 
+&reg_vbus {
+	/delete-property/ regulator-always-on;
+	gpios = <&gpio 8 GPIO_ACTIVE_HIGH>;
+	enable-active-high;
+	regulator-boot-on;
+};
+
 &switch0 {
 	ports {
 		port@1 {

@@ -5,7 +5,6 @@
 / {
 	gpio_export {
 		compatible = "gpio-export";
-		#size-cells = <0>;
 
 		buzzer {
 			/* Beeper requires PWM for frequency selection */
@@ -44,6 +43,13 @@
 		label = "firmware";
 		reg = <0x040000 0xfc0000>;
 	};
+};
+
+&reg_vbus {
+	/delete-property/ regulator-always-on;
+	gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
+	enable-active-high;
+	regulator-boot-on;
 };
 
 &switch0 {

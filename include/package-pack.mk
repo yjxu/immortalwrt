@@ -8,16 +8,30 @@ endif
 
 IPKG_STATE_DIR:=$(TARGET_DIR)/usr/lib/opkg
 
+define description_escape
+$(subst `,\`,$(subst $$,\$$,$(subst ",\",$(subst \,\\,$(1)))))
+endef
+
 # Generates a make statement to return a wildcard for candidate ipkg files
 # 1: package name
 define gen_package_wildcard
-  $(1)$$(if $$(filter -%,$$(ABIV_$(1))),,[^a-z-])*
+  $(1)$$(if $$(filter -%,$$(ABIV_$(1))),,[^a-z$(if $(CONFIG_USE_APK),,-)])*
+endef
+
+# 1: command and initial arguments
+# 2: arguments list
+# 3: tmp filename
+define maybe_use_xargs
+  $(if $(word 512,$(2)), \
+    $(file >$(3),$(2)) $(XARGS) $(1) < "$(3)"; rm "$(3)", \
+    $(1) $(2))
 endef
 
 # 1: package name
 # 2: candidate ipk files
 define remove_ipkg_files
-  $(if $(strip $(2)),$(SCRIPT_DIR)/ipkg-remove $(1) $(2))
+  $(if $(strip $(2)), \
+    $(call maybe_use_xargs,$(SCRIPT_DIR)/ipkg-remove $(1),$(2),$(TMP_DIR)/$(1).in))
 endef
 
 # 1: package name
@@ -107,6 +121,23 @@ endif
     ADIR_$(1):=$(PKG_BUILD_DIR)/apk-$(PKGARCH)/$(1)
     KEEP_$(1):=$(strip $(call Package/$(1)/conffiles))
 
+    APK_SCRIPTS_$(1):=
+
+    ifdef Package/$(1)/preinst
+      APK_SCRIPTS_$(1)+=--script "pre-install:$$(ADIR_$(1))/preinst"
+    endif
+    APK_SCRIPTS_$(1)+=--script "post-install:$$(ADIR_$(1))/post-install"
+
+    ifdef Package/$(1)/preinst
+      APK_SCRIPTS_$(1)+=--script "pre-upgrade:$$(ADIR_$(1))/pre-upgrade"
+    endif
+    APK_SCRIPTS_$(1)+=--script "post-upgrade:$$(ADIR_$(1))/post-upgrade"
+
+    APK_SCRIPTS_$(1)+=--script "pre-deinstall:$$(ADIR_$(1))/pre-deinstall"
+    ifdef Package/$(1)/postrm
+      APK_SCRIPTS_$(1)+=--script "post-deinstall:$$(ADIR_$(1))/postrm"
+    endif
+
     TARGET_VARIANT:=$$(if $(ALL_VARIANTS),$$(if $$(VARIANT),$$(filter-out *,$$(VARIANT)),$(firstword $(ALL_VARIANTS))))
     ifeq ($(BUILD_VARIANT),$$(if $$(TARGET_VARIANT),$$(TARGET_VARIANT),$(BUILD_VARIANT)))
     do_install=
@@ -160,6 +191,7 @@ endif
     $(STAGING_DIR_ROOT)/stamp/.$(1)_installed: $(PKG_BUILD_DIR)/.pkgdir/$(1).installed
 	mkdir -p $(STAGING_DIR_ROOT)/stamp
 	$(if $(ABI_VERSION),echo '$(ABI_VERSION)' | cmp -s - $(PKG_INFO_DIR)/$(1).version || { \
+		mkdir -p $(PKG_INFO_DIR); \
 		echo '$(ABI_VERSION)' > $(PKG_INFO_DIR)/$(1).version; \
 		$(foreach pkg,$(filter-out $(1),$(PROVIDES)), \
 			cp $(PKG_INFO_DIR)/$(1).version $(PKG_INFO_DIR)/$(pkg).version; \
@@ -168,10 +200,48 @@ endif
 	$(call locked,$(CP) $(PKG_BUILD_DIR)/.pkgdir/$(1)/. $(STAGING_DIR_ROOT)/,root-copy)
 	touch $$@
 
-    Package/$(1)/DEPENDS := $$(call mergelist,$$(foreach dep,$$(filter-out @%,$$(IDEPEND_$(1))),$$(dep)$$(call GetABISuffix,$$(dep))))
+    Package/$(1)/DEPENDS := $$(foreach dep,$$(filter-out @%,$$(IDEPEND_$(1))),$$(dep)$$(call GetABISuffix,$$(dep)))
     ifneq ($$(EXTRA_DEPENDS),)
-      Package/$(1)/DEPENDS := $$(EXTRA_DEPENDS)$$(if $$(Package/$(1)/DEPENDS),$$(comma) $$(Package/$(1)/DEPENDS))
+      ifeq ($(CONFIG_USE_APK),)
+        Package/$(1)/DEPENDS := $$(call mergelist,$$(Package/$(1)/DEPENDS))
+        Package/$(1)/DEPENDS := $$(EXTRA_DEPENDS)$$(if $$(Package/$(1)/DEPENDS),$$(comma) $$(Package/$(1)/DEPENDS))
+      else
+        _SEP := __COMMA_SEP__
+        _SPACE := __SPACE_SEP__
+        _DEPENDS := $$(Package/$(1)/DEPENDS)
+        _EXTRA_DEPENDS_ABI :=
+        _DEP_ITEMS := $$(subst $$(_SEP),$$(space),$$(subst $$(space),$$(_SPACE),$$(subst $$(comma),$$(_SEP),$$(EXTRA_DEPENDS))))
+
+        $$(foreach dep,$$(_DEP_ITEMS), \
+          $$(eval _CUR_DEP := $$(subst $$(_SPACE),$$(space),$$(strip $$(dep)))) \
+          $$(eval _PKG_NAME := $$(word 1,$$(_CUR_DEP))) \
+          $$(if $$(findstring $$(paren_left), $$(_PKG_NAME)), \
+            $$(error "Unsupported extra dependency format: no space before '(': $$(_CUR_DEP)")) \
+          ) \
+          $$(eval _ABI_SUFFIX := $$(call GetABISuffix,$$(_PKG_NAME))) \
+          $$(eval _PKG_NAME_ABI := $$(_PKG_NAME)$$(_ABI_SUFFIX)) \
+          $$(eval _VERSION_CONSTRAINT := $$(word 2,$$(_CUR_DEP))) \
+          $$(if $$(_VERSION_CONSTRAINT), \
+            $$(eval _EXTRA_DEP := $$(_PKG_NAME_ABI) $$(_VERSION_CONSTRAINT)), \
+            $$(error "Extra dependencies must have version constraints. $$(_PKG_NAME) seems to be unversioned.") \
+          ) \
+          $$(if $$(_EXTRA_DEPENDS_ABI), \
+            $$(eval _EXTRA_DEPENDS_ABI := $$(_EXTRA_DEPENDS_ABI)$$(comma)$$(_EXTRA_DEP)), \
+            $$(eval _EXTRA_DEPENDS_ABI := $$(_EXTRA_DEP)) \
+          ) \
+          $$(if $$(_DEPENDS), \
+            $$(eval _DEPENDS := $$(filter-out $$(_PKG_NAME_ABI),$$(_DEPENDS))) \
+          ) \
+        )
+
+        _DEPENDS := $$(call mergelist,$$(_DEPENDS))
+        Package/$(1)/DEPENDS := $$(_EXTRA_DEPENDS_ABI)$$(if $$(_DEPENDS),$$(comma) $$(_DEPENDS))
+      endif
+    else
+      Package/$(1)/DEPENDS := $$(call mergelist,$$(Package/$(1)/DEPENDS))
     endif
+
+    $$(info $(1) fused dependencies: $$(Package/$(1)/DEPENDS))
 
 $(_define) Package/$(1)/CONTROL
 Package: $(1)$$(ABIV_$(1))
@@ -201,6 +271,7 @@ $(_endef)
     $$(PACK_$(1)) : export DESCRIPTION=$$(Package/$(1)/description)
     $$(PACK_$(1)) : export PATH=$$(TARGET_PATH_PKG)
     $$(PACK_$(1)) : export PKG_SOURCE_DATE_EPOCH:=$(PKG_SOURCE_DATE_EPOCH)
+    $$(PACK_$(1)) : export SOURCE_DATE_EPOCH:=$(PKG_SOURCE_DATE_EPOCH)
     $(PKG_INFO_DIR)/$(1).provides $$(PACK_$(1)): $(STAMP_BUILT) $(INCLUDE_DIR)/package-pack.mk
 	rm -rf $$(IDIR_$(1))
 ifeq ($$(CONFIG_USE_APK),)
@@ -248,7 +319,7 @@ endif
 		)
     endif
 
-	$(INSTALL_DIR) $$(PDIR_$(1))/tmp
+	$(INSTALL_DIR) $$(PDIR_$(1))
 
 ifeq ($(CONFIG_USE_APK),)
 	mkdir -p $$(IDIR_$(1))/CONTROL
@@ -288,43 +359,59 @@ else
 		echo "[ -s "\$$$${IPKG_INSTROOT}/lib/functions.sh" ] || exit 0"; \
 		echo ". \$$$${IPKG_INSTROOT}/lib/functions.sh"; \
 		echo 'export root="$$$${IPKG_INSTROOT}"'; \
-		echo 'export pkgname="$(1)"'; \
+		echo 'export pkgname="$(1)$$(ABIV_$(1))"'; \
 		echo "add_group_and_user"; \
-		[ ! -f $$(ADIR_$(1))/postinst-pkg ] || cat "$$(ADIR_$(1))/postinst-pkg"; \
 		echo "default_postinst"; \
+		[ ! -f $$(ADIR_$(1))/postinst-pkg ] || sed -z 's/^\s*#!/#!/' "$$(ADIR_$(1))/postinst-pkg"; \
 	) > $$(ADIR_$(1))/post-install;
+
+    ifdef Package/$(1)/preinst
+	( \
+		echo "#!/bin/sh"; \
+		echo 'export PKG_UPGRADE=1'; \
+		[ ! -f $$(ADIR_$(1))/preinst ] || sed -z 's/^\s*#!/#!/' "$$(ADIR_$(1))/preinst"; \
+	) > $$(ADIR_$(1))/pre-upgrade;
+    endif
+
+	( \
+		echo "#!/bin/sh"; \
+		echo 'export PKG_UPGRADE=1'; \
+		[ ! -f $$(ADIR_$(1))/post-install ] || sed -z 's/^\s*#!/#!/' "$$(ADIR_$(1))/post-install"; \
+	) > $$(ADIR_$(1))/post-upgrade;
 
 	( \
 		echo "#!/bin/sh"; \
 		echo "[ -s "\$$$${IPKG_INSTROOT}/lib/functions.sh" ] || exit 0"; \
 		echo ". \$$$${IPKG_INSTROOT}/lib/functions.sh"; \
 		echo 'export root="$$$${IPKG_INSTROOT}"'; \
-		echo 'export pkgname="$(1)"'; \
-		[ ! -f $$(ADIR_$(1))/prerm-pkg ] || cat "$$(ADIR_$(1))/prerm-pkg"; \
+		echo 'export pkgname="$(1)$$(ABIV_$(1))"'; \
 		echo "default_prerm"; \
+		[ ! -f $$(ADIR_$(1))/prerm-pkg ] || sed -z 's/^\s*#!/#!/' "$$(ADIR_$(1))/prerm-pkg"; \
 	) > $$(ADIR_$(1))/pre-deinstall;
 
-	if [ -n "$(USERID)" ]; then echo $(USERID) > $$(IDIR_$(1))/lib/apk/packages/$(1).rusers; fi;
-	if [ -n "$(ALTERNATIVES)" ]; then echo $(ALTERNATIVES) > $$(IDIR_$(1))/lib/apk/packages/$(1).alternatives; fi;
-	(cd $$(IDIR_$(1)) && find . -type f,l -printf "/%P\n" > $$(IDIR_$(1))/lib/apk/packages/$(1).list)
+	[ ! -f $$(ADIR_$(1))/postrm ] || sed -zi 's/^\s*#!/#!/' "$$(ADIR_$(1))/postrm";
+
+	if [ -n "$(USERID)" ]; then echo $(USERID) > $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).rusers; fi;
+	if [ -n "$(ALTERNATIVES)" ]; then echo $(ALTERNATIVES) > $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).alternatives; fi;
+	(cd $$(IDIR_$(1)) && find . -type f,l -printf "/%P\n" | sort > $(TMP_DIR)/$(1).list && mv $(TMP_DIR)/$(1).list $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).list)
 	# Move conffiles to IDIR and build conffiles_static with csums
 	if [ -f $$(ADIR_$(1))/conffiles ]; then \
-		mv -f $$(ADIR_$(1))/conffiles $$(IDIR_$(1))/lib/apk/packages/$(1).conffiles; \
-		for file in $$$$(cat $$(IDIR_$(1))/lib/apk/packages/$(1).conffiles); do \
+		mv -f $$(ADIR_$(1))/conffiles $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).conffiles; \
+		for file in $$$$(cat $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).conffiles); do \
 			[ -f $$(IDIR_$(1))/$$$$file ] || continue; \
 			csum=$$$$($(MKHASH) sha256 $$(IDIR_$(1))/$$$$file); \
-			echo $$$$file $$$$csum >> $$(IDIR_$(1))/lib/apk/packages/$(1).conffiles_static; \
+			echo $$$$file $$$$csum >> $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).conffiles_static; \
 		done; \
 	fi
 
 	# Some package (base-files) manually append stuff to conffiles
 	# Append stuff from it and delete the CONTROL directory since everything else should be migrated
 	if [ -f $$(IDIR_$(1))/CONTROL/conffiles ]; then \
-		echo $$$$(IDIR_$(1))/CONTROL/conffiles >> $$(IDIR_$(1))/lib/apk/packages/$(1).conffiles; \
+		echo $$$$(IDIR_$(1))/CONTROL/conffiles >> $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).conffiles; \
 		for file in $$$$(cat $$(IDIR_$(1))/CONTROL/conffiles); do \
 			[ -f $$(IDIR_$(1))/$$$$file ] || continue; \
 			csum=$$$$($(MKHASH) sha256 $$(IDIR_$(1))/$$$$file); \
-			echo $$$$file $$$$csum >> $$(IDIR_$(1))/lib/apk/packages/$(1).conffiles_static; \
+			echo $$$$file $$$$csum >> $$(IDIR_$(1))/lib/apk/packages/$(1)$$(ABIV_$(1)).conffiles_static; \
 		done; \
 		rm -rf $$(IDIR_$(1))/CONTROL/conffiles; \
 	fi
@@ -339,29 +426,25 @@ else
 	$(FAKEROOT) $(STAGING_DIR_HOST)/bin/apk mkpkg \
 	  --info "name:$(1)$$(ABIV_$(1))" \
 	  --info "version:$(VERSION)" \
-	  --info "description:$$(strip $$(Package/$(1)/description))" \
-	  --info "arch:$(PKGARCH)" \
+	  $$(if $$(ABIV_$(1)),--info "tags:openwrt:abiversion=$$(ABIV_$(1))") \
+	  --info "description:$$(call description_escape,$$(strip $$(Package/$(1)/description)))" \
+	  $(if $(findstring all,$(PKGARCH)),--info "arch:noarch",--info "arch:$(PKGARCH)") \
 	  --info "license:$(LICENSE)" \
 	  --info "origin:$(SOURCE)" \
 	  --info "url:$(URL)" \
 	  --info "maintainer:$(MAINTAINER)" \
-	  --info "provides:$$(foreach prov,\
-			$$(filter-out $(1)$$(ABIV_$(1)), \
-			$(PROVIDES)$$(if $$(ABIV_$(1)), \
-				$(1)=$(VERSION) $(foreach provide, \
-					$(PROVIDES), \
-					$(provide)$$(ABIV_$(1))=$(VERSION) \
-				) \
-			) \
-		), \
-		$$(prov) )" \
-	  $(if $(DEFAULT_VARIANT),--info "provider-priority:100") \
-	  --script "post-install:$$(ADIR_$(1))/post-install" \
-	  --script "pre-deinstall:$$(ADIR_$(1))/pre-deinstall" \
+	  --info "provides:$$(if $$(ABIV_$(1)), \
+	    $(1) $(foreach provide,$(PROVIDES), $(provide)$$(ABIV_$(1))=$(VERSION)), \
+	    $(if $(ALTERNATIVES), \
+	      $(PROVIDES), \
+	      $(foreach provide,$(PROVIDES), $(provide)=$(VERSION)) \
+	    ) \
+	  )" \
+	  $(if $(DEFAULT_VARIANT),--info "provider-priority:100",$(if $(PROVIDES),--info "provider-priority:1")) \
+	  $$(APK_SCRIPTS_$(1)) \
 	  --info "depends:$$(foreach depends,$$(subst $$(comma),$$(space),$$(subst $$(space),,$$(subst $$(paren_right),,$$(subst $$(paren_left),,$$(Package/$(1)/DEPENDS))))),$$(depends))" \
 	  --files "$$(IDIR_$(1))" \
-	  --output "$$(PACK_$(1))" \
-	  --sign "$(BUILD_KEY_APK_SEC)"
+	  --output "$$(PACK_$(1))"
 endif
 
 	@[ -f $$(PACK_$(1)) ]
